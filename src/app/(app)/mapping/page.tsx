@@ -55,11 +55,12 @@ type MarkerJSONData = {
     features: MarkerFeature[];
 };
 
-
 const Page: React.FC = () => {
     const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/satellite-v9');
     const [geoJSONData, setGeoJSONData] = useState<GeoJSONData | null>(null);
     const [markerJSONData, setMarkerJSONData] = useState<MarkerJSONData | null>(null);
+    // New state for main water bodies
+    const [mainWaterData, setMainWaterData] = useState<GeoJSONData | null>(null);
     const [selectedMarker, setSelectedMarker] = useState<Feature | null>(null);
     const mapRef = useRef<MapRef>(null);
 
@@ -77,6 +78,14 @@ const Page: React.FC = () => {
             .catch(error => console.error('Error loading MarkerJSON data:', error));
     }, []);
 
+    // New useEffect to load main water bodies data
+    useEffect(() => {
+        fetch('/main_water_bodies.geojson')
+            .then(response => response.json())
+            .then(data => setMainWaterData(data))
+            .catch(error => console.error('Error loading main water bodies data:', error));
+    }, []);
+
     const handleStyleChange = (event: ChangeEvent<HTMLSelectElement>) => {
         setMapStyle(event.target.value);
     };
@@ -84,7 +93,13 @@ const Page: React.FC = () => {
     return (
         <div className='w-full h-[70vh]'>
             <div className='absolute z-10 p-3'>
-                <select name='map' aria-label='map' onChange={handleStyleChange} value={mapStyle} className='bg-primary text-secondary'>
+                <select
+                    name='map'
+                    aria-label='map'
+                    onChange={handleStyleChange}
+                    value={mapStyle}
+                    className='bg-primary text-secondary'
+                >
                     <option value="mapbox://styles/mapbox/satellite-v9">Satellite</option>
                     <option value="mapbox://styles/mapbox/streets-v11">Street</option>
                     <option value="mapbox://styles/mapbox/satellite-streets-v11">Satellite Street</option>
@@ -157,6 +172,29 @@ const Page: React.FC = () => {
                         </div>
                     </Popup>
                 )}
+
+                {/* New Source for main water bodies */}
+                {mainWaterData && (
+                    <Source type="geojson" data={mainWaterData}>
+                        <Layer
+                            id="main-water-bodies-fill"
+                            type="fill"
+                            paint={{
+                                'fill-color': 'rgba(0, 255, 0, 0.7)', // Adjust color and opacity as needed
+                                'fill-opacity': 0.5,
+                            }}
+                        />
+                        <Layer
+                            id="main-water-bodies-outline"
+                            type="line"
+                            paint={{
+                                'line-color': '#00ff00', // Adjust line color as needed
+                                'line-width': 2,
+                            }}
+                        />
+                    </Source>
+                )}
+
             </Map>
         </div>
     );
