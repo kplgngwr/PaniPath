@@ -95,7 +95,11 @@ const Navbar = () => {
 
     return (
         <header className="bg-blue-900 text-white">
-            
+            <div className='relative overflow-hidden bg-gradient-to-r from-blue-600 to-blue-900 p-2'>
+                <div className="whitespace-nowrap marquee-content animate-marquee text-yellow-300 font-semibold text-lg">
+                    This website does not belong to any government organization.
+                </div>
+            </div>
             <div className="px-4 md:px-20 flex justify-between md:justify-end items-center">
                 <button className="py-1 px-3 bg-green-500 text-black font-bold">
                     <Link href="/dashboard/home">Admin</Link>

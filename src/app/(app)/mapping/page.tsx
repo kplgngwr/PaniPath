@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
-import Map, { NavigationControl, Source, Layer, MapRef, Marker, Popup } from 'react-map-gl';
+import Map, { NavigationControl, Source, Layer, MapRef, Marker, Popup, MapLayerMouseEvent } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { IconMapPinFilled } from '@tabler/icons-react';
 
@@ -59,9 +59,15 @@ const Page: React.FC = () => {
     const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/satellite-v9');
     const [geoJSONData, setGeoJSONData] = useState<GeoJSONData | null>(null);
     const [markerJSONData, setMarkerJSONData] = useState<MarkerJSONData | null>(null);
-    // New state for main water bodies
     const [mainWaterData, setMainWaterData] = useState<GeoJSONData | null>(null);
     const [selectedMarker, setSelectedMarker] = useState<Feature | null>(null);
+
+    // New state for the selected zone (from main water bodies)
+    const [selectedZone, setSelectedZone] = useState<Feature | null>(null);
+    // States for the checkboxes
+    const [waterBodiesChecked, setWaterBodiesChecked] = useState(false);
+    const [plantationChecked, setPlantationChecked] = useState(false);
+
     const mapRef = useRef<MapRef>(null);
 
     useEffect(() => {
@@ -78,7 +84,6 @@ const Page: React.FC = () => {
             .catch(error => console.error('Error loading MarkerJSON data:', error));
     }, []);
 
-    // New useEffect to load main water bodies data
     useEffect(() => {
         fetch('/main_water_bodies.geojson')
             .then(response => response.json())
@@ -89,6 +94,32 @@ const Page: React.FC = () => {
     const handleStyleChange = (event: ChangeEvent<HTMLSelectElement>) => {
         setMapStyle(event.target.value);
     };
+
+    // When clicking on the map, check if a zone from main water bodies was clicked.
+    const handleMapClick = (event: MapLayerMouseEvent) => {
+        if (mapRef.current) {
+            // Query features from the main water bodies fill layer
+            const features = mapRef.current.queryRenderedFeatures(event.point, {
+                layers: ['main-water-bodies-fill']
+            });
+            if (features.length > 0) {
+                // If a feature is found, set it as the selected zone.
+                setSelectedZone(features[0] as Feature);
+            } else {
+                setSelectedZone(null);
+            }
+        }
+    };
+
+    // Determine the fill color for the selected zone based on the checkboxes.
+    let selectedZoneFillColor = 'rgba(0, 255, 0, 0.7)'; // default color
+    if (waterBodiesChecked && plantationChecked) {
+        selectedZoneFillColor = 'purple';
+    } else if (waterBodiesChecked) {
+        selectedZoneFillColor = 'red';
+    } else if (plantationChecked) {
+        selectedZoneFillColor = 'green';
+    }
 
     return (
         <div className='w-full h-[70vh]'>
@@ -106,6 +137,32 @@ const Page: React.FC = () => {
                 </select>
             </div>
 
+            {/* Fixed control panel for zone styling (shown only when a zone is selected) */}
+            {selectedZone && (
+                <div className="absolute top-16 right-3 bg-white p-3 z-10 shadow">
+                    <div>
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={waterBodiesChecked}
+                                onChange={(e) => setWaterBodiesChecked(e.target.checked)}
+                            />{' '}
+                            Water Bodies
+                        </label>
+                    </div>
+                    <div>
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={plantationChecked}
+                                onChange={(e) => setPlantationChecked(e.target.checked)}
+                            />{' '}
+                            Plantation
+                        </label>
+                    </div>
+                </div>
+            )}
+
             <Map
                 initialViewState={{
                     longitude: 76.9205261,
@@ -116,6 +173,7 @@ const Page: React.FC = () => {
                 mapStyle={mapStyle}
                 mapboxAccessToken={MAPBOX_TOKEN}
                 ref={mapRef}
+                onClick={handleMapClick}
             >
                 <NavigationControl position="top-right" />
 
@@ -155,7 +213,9 @@ const Page: React.FC = () => {
                             setSelectedMarker(feature);
                         }}
                     >
-                        <div className='text-[#00d9ff]'><IconMapPinFilled /></div>
+                        <div className='text-[#00d9ff]'>
+                            <IconMapPinFilled />
+                        </div>
                     </Marker>
                 ))}
 
@@ -173,14 +233,13 @@ const Page: React.FC = () => {
                     </Popup>
                 )}
 
-                {/* New Source for main water bodies */}
                 {mainWaterData && (
                     <Source type="geojson" data={mainWaterData}>
                         <Layer
                             id="main-water-bodies-fill"
                             type="fill"
                             paint={{
-                                'fill-color': 'rgba(0, 255, 0, 0.7)', // Adjust color and opacity as needed
+                                'fill-color': 'rgba(0, 255, 0, 0.7)',
                                 'fill-opacity': 0.5,
                             }}
                         />
@@ -188,13 +247,34 @@ const Page: React.FC = () => {
                             id="main-water-bodies-outline"
                             type="line"
                             paint={{
-                                'line-color': '#00ff00', // Adjust line color as needed
+                                'line-color': '#00ff00',
                                 'line-width': 2,
                             }}
                         />
                     </Source>
                 )}
 
+                {/* If a zone is selected, render it on top with the new style */}
+                {selectedZone && (
+                    <Source type="geojson" data={{ type: 'FeatureCollection', features: [selectedZone] }}>
+                        <Layer
+                            id="selected-zone-fill"
+                            type="fill"
+                            paint={{
+                                'fill-color': selectedZoneFillColor,
+                                'fill-opacity': 0.7,
+                            }}
+                        />
+                        <Layer
+                            id="selected-zone-outline"
+                            type="line"
+                            paint={{
+                                'line-color': '#000',
+                                'line-width': 2,
+                            }}
+                        />
+                    </Source>
+                )}
             </Map>
         </div>
     );
