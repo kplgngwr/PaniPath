@@ -31,7 +31,7 @@
     "class-variance-authority": "^0.7.0",
     "cloudinary": "^2.4.0",
     "clsx": "^2.1.1",
-    "firebase": "^10.13.1",
+    "firebase": "^10.14.1",
     "lucide-react": "^0.429.0",
     "mapbox-gl": "^3.6.0",
     "mongoose": "^8.6.1",

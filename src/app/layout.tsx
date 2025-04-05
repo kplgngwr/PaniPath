@@ -5,8 +5,8 @@ import { Inter } from 'next/font/google';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-    title: 'SIH 2024',
-    description: 'SIH 2024',
+    title: 'PaniPath',
+    description: 'PaniPath is a web application that provides information about water bodies in Delhi.',
     icons: {
         icon: '/favicon.ico',
     },

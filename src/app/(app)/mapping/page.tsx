@@ -1,11 +1,35 @@
 'use client';
 
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
-import Map, { NavigationControl, Source, Layer, MapRef, Marker, Popup, MapLayerMouseEvent } from 'react-map-gl';
+import Map, {
+    NavigationControl,
+    Source,
+    Layer,
+    MapRef,
+    Marker,
+    Popup,
+    MapLayerMouseEvent
+} from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { IconMapPinFilled } from '@tabler/icons-react';
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+// Firebase imports
+import { initializeApp } from 'firebase/app';
+import { getDatabase, ref, set, onValue } from 'firebase/database';
+
+// Initialize Firebase with your configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyCugLu_wwUY0UeczWWCvagz3DvPhgo4sro",
+    authDomain: "greenheart-2025.firebaseapp.com",
+    databaseURL: "https://greenheart-2025-default-rtdb.firebaseio.com",
+    projectId: "greenheart-2025",
+    storageBucket: "greenheart-2025.firebasestorage.app",
+    messagingSenderId: "767206203790",
+    appId: "1:767206203790:web:795fadf6feb50b247f04df",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
 type FeatureProperties = {
     name: string;
@@ -14,7 +38,7 @@ type FeatureProperties = {
     };
 };
 
-type Feature = {
+export type Feature = {
     type: string;
     geometry: {
         type: string;
@@ -55,18 +79,71 @@ type MarkerJSONData = {
     features: MarkerFeature[];
 };
 
+// Helper function to recursively remove undefined values and functions
+const cleanData = (data: any): any => {
+    if (typeof data === 'function') {
+        return undefined;
+    }
+    if (Array.isArray(data)) {
+        return data.map(item => cleanData(item)).filter(item => item !== undefined);
+    }
+    if (data !== null && typeof data === 'object') {
+        const newObj: any = {};
+        for (const key in data) {
+            if (Object.prototype.hasOwnProperty.call(data, key)) {
+                const cleanedValue = cleanData(data[key]);
+                if (cleanedValue !== undefined) {
+                    newObj[key] = cleanedValue;
+                }
+            }
+        }
+        return newObj;
+    }
+    return data;
+};
+
+// Update saveZoneData to return the promise so we can handle it in the component.
+const saveZoneData = (zone: Feature, color: string) => {
+    const zoneId =
+        zone.properties && zone.properties.name
+            ? zone.properties.name.replace(/\s+/g, '_')
+            : `zone_${Date.now()}`;
+
+    const dataToSave = {
+        polygon: zone,
+        color,
+        savedAt: new Date().toISOString(),
+    };
+
+    const sanitizedData = cleanData(dataToSave);
+
+    return set(ref(db, 'zones/' + zoneId), sanitizedData)
+        .then(() => {
+            console.log('Zone data saved successfully');
+        })
+        .catch((error) => {
+            console.error('Error saving zone data:', error);
+            throw error;
+        });
+};
+
 const Page: React.FC = () => {
     const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/satellite-v9');
     const [geoJSONData, setGeoJSONData] = useState<GeoJSONData | null>(null);
     const [markerJSONData, setMarkerJSONData] = useState<MarkerJSONData | null>(null);
     const [mainWaterData, setMainWaterData] = useState<GeoJSONData | null>(null);
     const [selectedMarker, setSelectedMarker] = useState<Feature | null>(null);
-
-    // New state for the selected zone (from main water bodies)
+    // State for the selected zone (from main water bodies)
     const [selectedZone, setSelectedZone] = useState<Feature | null>(null);
-    // States for the checkboxes
+    // States for the checkboxes (mutually exclusive)
     const [waterBodiesChecked, setWaterBodiesChecked] = useState(false);
     const [plantationChecked, setPlantationChecked] = useState(false);
+    // Notification state for gentle alert
+    const [notification, setNotification] = useState<string | null>(null);
+    // State for saved zones fetched from Firebase
+    const [savedZones, setSavedZones] = useState<
+        Array<{ polygon: Feature; color: string; savedAt: string }>
+    >([]);
 
     const mapRef = useRef<MapRef>(null);
 
@@ -78,7 +155,7 @@ const Page: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        fetch('/full_water_bodies.json')
+        fetch('/full_water-bodies.json')
             .then(response => response.json())
             .then(data => setMarkerJSONData(data))
             .catch(error => console.error('Error loading MarkerJSON data:', error));
@@ -91,6 +168,24 @@ const Page: React.FC = () => {
             .catch(error => console.error('Error loading main water bodies data:', error));
     }, []);
 
+    // Listen for saved zones changes in Firebase
+    useEffect(() => {
+        const zonesRef = ref(db, 'zones');
+        onValue(zonesRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                const zonesArray = Object.values(data) as Array<{
+                    polygon: Feature;
+                    color: string;
+                    savedAt: string;
+                }>;
+                setSavedZones(zonesArray);
+            } else {
+                setSavedZones([]);
+            }
+        });
+    }, []);
+
     const handleStyleChange = (event: ChangeEvent<HTMLSelectElement>) => {
         setMapStyle(event.target.value);
     };
@@ -98,12 +193,10 @@ const Page: React.FC = () => {
     // When clicking on the map, check if a zone from main water bodies was clicked.
     const handleMapClick = (event: MapLayerMouseEvent) => {
         if (mapRef.current) {
-            // Query features from the main water bodies fill layer
             const features = mapRef.current.queryRenderedFeatures(event.point, {
                 layers: ['main-water-bodies-fill']
             });
             if (features.length > 0) {
-                // If a feature is found, set it as the selected zone.
                 setSelectedZone(features[0] as unknown as Feature);
             } else {
                 setSelectedZone(null);
@@ -111,18 +204,38 @@ const Page: React.FC = () => {
         }
     };
 
-    // Determine the fill color for the selected zone based on the checkboxes.
-    let selectedZoneFillColor = 'rgba(0, 255, 0, 0.7)'; // default color
-    if (waterBodiesChecked && plantationChecked) {
-        selectedZoneFillColor = 'purple';
-    } else if (waterBodiesChecked) {
+    // Compute the fill color for the selected zone.
+    let selectedZoneFillColor = 'blue';
+    if (waterBodiesChecked) {
         selectedZoneFillColor = 'red';
     } else if (plantationChecked) {
         selectedZoneFillColor = 'green';
     }
 
+    // Handler to save zone data and display notification on success
+    const handleSaveZone = () => {
+        if (selectedZone) {
+            saveZoneData(selectedZone, selectedZoneFillColor)
+                .then(() => {
+                    setNotification("Zone data saved successfully!");
+                    // Clear the notification after 3 seconds
+                    setTimeout(() => setNotification(null), 3000);
+                })
+                .catch((error) => {
+                    alert("Error saving zone data: " + error.message);
+                });
+        }
+    };
+
     return (
         <div className='w-full h-[70vh]'>
+            {/* Notification alert */}
+            {notification && (
+                <div className="absolute top-10 right-1/2 bg-green-500 text-white p-3 rounded shadow">
+                    {notification}
+                </div>
+            )}
+
             <div className='absolute z-10 p-3'>
                 <select
                     name='map'
@@ -137,7 +250,7 @@ const Page: React.FC = () => {
                 </select>
             </div>
 
-            {/* Fixed control panel for zone styling (shown only when a zone is selected) */}
+            {/* Control panel for styling the selected zone */}
             {selectedZone && (
                 <div className="absolute top-64 right-14 bg-white p-3 z-10 shadow">
                     <div>
@@ -145,7 +258,14 @@ const Page: React.FC = () => {
                             <input
                                 type="checkbox"
                                 checked={waterBodiesChecked}
-                                onChange={(e) => setWaterBodiesChecked(e.target.checked)}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setWaterBodiesChecked(true);
+                                        setPlantationChecked(false);
+                                    } else {
+                                        setWaterBodiesChecked(false);
+                                    }
+                                }}
                             />{' '}
                             Water Bodies
                         </label>
@@ -155,11 +275,24 @@ const Page: React.FC = () => {
                             <input
                                 type="checkbox"
                                 checked={plantationChecked}
-                                onChange={(e) => setPlantationChecked(e.target.checked)}
+                                onChange={(e) => {
+                                    if (e.target.checked) {
+                                        setPlantationChecked(true);
+                                        setWaterBodiesChecked(false);
+                                    } else {
+                                        setPlantationChecked(false);
+                                    }
+                                }}
                             />{' '}
                             Plantation
                         </label>
                     </div>
+                    <button
+                        className="mt-2 bg-blue-500 text-white px-3 py-1 rounded"
+                        onClick={handleSaveZone}
+                    >
+                        Save Zone Data
+                    </button>
                 </div>
             )}
 
@@ -171,7 +304,7 @@ const Page: React.FC = () => {
                 }}
                 style={{ width: '100%', height: '100%' }}
                 mapStyle={mapStyle}
-                mapboxAccessToken={MAPBOX_TOKEN}
+                mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
                 ref={mapRef}
                 onClick={handleMapClick}
             >
@@ -239,7 +372,7 @@ const Page: React.FC = () => {
                             id="main-water-bodies-fill"
                             type="fill"
                             paint={{
-                                'fill-color': 'rgba(0, 255, 0, 0.7)',
+                                'fill-color': 'rgba(0, 0, 255, 0.7)',
                                 'fill-opacity': 0.5,
                             }}
                         />
@@ -247,14 +380,35 @@ const Page: React.FC = () => {
                             id="main-water-bodies-outline"
                             type="line"
                             paint={{
-                                'line-color': '#00ff00',
+                                'line-color': 'blue',
                                 'line-width': 2,
                             }}
                         />
                     </Source>
                 )}
 
-                {/* If a zone is selected, render it on top with the new style */}
+                {/* Render saved zones from Firebase */}
+                {savedZones.map((zone, index) => (
+                    <Source key={index} type="geojson" data={zone.polygon}>
+                        <Layer
+                            id={`saved-zone-fill-${index}`}
+                            type="fill"
+                            paint={{
+                                'fill-color': zone.color,
+                                'fill-opacity': 0.7,
+                            }}
+                        />
+                        <Layer
+                            id={`saved-zone-outline-${index}`}
+                            type="line"
+                            paint={{
+                                'line-color': '#000',
+                                'line-width': 2,
+                            }}
+                        />
+                    </Source>
+                ))}
+
                 {selectedZone && (
                     <Source type="geojson" data={{ type: 'FeatureCollection', features: [selectedZone] }}>
                         <Layer
