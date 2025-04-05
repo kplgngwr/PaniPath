@@ -104,7 +104,7 @@ const Page: React.FC = () => {
             });
             if (features.length > 0) {
                 // If a feature is found, set it as the selected zone.
-                setSelectedZone(features[0] as Feature);
+                setSelectedZone(features[0] as unknown as Feature);
             } else {
                 setSelectedZone(null);
             }
@@ -139,7 +139,7 @@ const Page: React.FC = () => {
 
             {/* Fixed control panel for zone styling (shown only when a zone is selected) */}
             {selectedZone && (
-                <div className="absolute top-16 right-3 bg-white p-3 z-10 shadow">
+                <div className="absolute top-64 right-14 bg-white p-3 z-10 shadow">
                     <div>
                         <label>
                             <input
