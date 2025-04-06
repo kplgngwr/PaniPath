@@ -12,24 +12,10 @@ import Map, {
 } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { IconMapPinFilled } from '@tabler/icons-react';
-
-// Firebase imports
-import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, onValue } from 'firebase/database';
-
-// Initialize Firebase with your configuration
-const firebaseConfig = {
-    apiKey: "AIzaSyCugLu_wwUY0UeczWWCvagz3DvPhgo4sro",
-    authDomain: "greenheart-2025.firebaseapp.com",
-    databaseURL: "https://greenheart-2025-default-rtdb.firebaseio.com",
-    projectId: "greenheart-2025",
-    storageBucket: "greenheart-2025.firebasestorage.app",
-    messagingSenderId: "767206203790",
-    appId: "1:767206203790:web:795fadf6feb50b247f04df",
-};
-
-const app = initializeApp(firebaseConfig);
+import { app } from '@/lib/firebase';
 const db = getDatabase(app);
+
 
 type FeatureProperties = {
     name: string;
@@ -103,29 +89,52 @@ const cleanData = (data: any): any => {
 };
 
 // Update saveZoneData to return the promise so we can handle it in the component.
-const saveZoneData = (zone: Feature, color: string) => {
-    const zoneId =
-        zone.properties && zone.properties.name
-            ? zone.properties.name.replace(/\s+/g, '_')
-            : `zone_${Date.now()}`;
+const saveZoneData = async (zone: Feature, color: string) => {
+    const zoneId = zone.properties?.name
+        ? zone.properties.name.replace(/\s+/g, '_')
+        : `zone_${Date.now()}`;
 
-    const dataToSave = {
-        polygon: zone,
-        color,
-        savedAt: new Date().toISOString(),
-    };
+    const zonesRef = ref(db, 'zones');
 
-    const sanitizedData = cleanData(dataToSave);
+    return new Promise<void>((resolve, reject) => {
+        onValue(zonesRef, (snapshot) => {
+            const data = snapshot.val();
+            let existingKey: string | null = null;
 
-    return set(ref(db, 'zones/' + zoneId), sanitizedData)
-        .then(() => {
-            console.log('Zone data saved successfully');
-        })
-        .catch((error) => {
-            console.error('Error saving zone data:', error);
-            throw error;
-        });
+            // Try to find existing zone with the same polygon name
+            if (data) {
+                for (const [key, value] of Object.entries(data)) {
+                    if ((value as any).polygon?.properties?.name === zone.properties.name) {
+                        existingKey = key;
+                        break;
+                    }
+                }
+            }
+
+            const dataToSave = {
+                polygon: zone,
+                color,
+                savedAt: new Date().toISOString(),
+            };
+
+            const sanitizedData = cleanData(dataToSave);
+
+            const finalZoneId = existingKey || zoneId;
+
+            // Save/update the zone
+            set(ref(db, 'zones/' + finalZoneId), sanitizedData)
+                .then(() => {
+                    console.log('Zone data saved/updated successfully');
+                    resolve();
+                })
+                .catch((error) => {
+                    console.error('Error saving/updating zone data:', error);
+                    reject(error);
+                });
+        }, { onlyOnce: true }); // onlyOnce ensures it runs once and doesn't attach persistent listeners
+    });
 };
+
 
 const Page: React.FC = () => {
     const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/satellite-v9');

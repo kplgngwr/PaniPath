@@ -3,13 +3,14 @@ import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDC83Gzlj8ApLkyKppwl7uvnFQQxMOj4-8",
-  authDomain: "tekathon-b1a98.firebaseapp.com",
-  projectId: "tekathon-b1a98",
-  storageBucket: "tekathon-b1a98.appspot.com",
-  messagingSenderId: "47926223877",
-  appId: "1:47926223877:web:39cb0aa3f0755e7e52686c",
-  measurementId: "G-PSERBC5PSN"
+  apiKey: "AIzaSyA8vnVSghQlPiI7Re17-RaFLik2x4jUfuE",
+  authDomain: "water-monitoring-e2997.firebaseapp.com",
+  databaseURL: "https://water-monitoring-e2997-default-rtdb.firebaseio.com",
+  projectId: "water-monitoring-e2997",
+  storageBucket: "water-monitoring-e2997.firebasestorage.app",
+  messagingSenderId: "208153402903",
+  appId: "1:208153402903:web:159c34315514f08ad7c652",
+  measurementId: "G-V684M82BNJ"
 };
 
 // Initialize Firebase
